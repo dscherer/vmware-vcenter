@@ -2,7 +2,8 @@
 Puppet::Type.newtype(:esx_datastore) do
   @doc = "Manage vCenter esx hosts service."
 
-  feature :remote, "Manage remote CIFS/NFS filesystem."
+  feature :file_storage, 'the provider handles file based storage (CIFS/NFS)'
+  feature :block_storage, 'the provider handles block storage (VMFS)'
 
   newparam(:name, :namevar => true) do
     desc "ESX host:service name."
@@ -27,8 +28,10 @@ Puppet::Type.newtype(:esx_datastore) do
 
   newproperty(:type) do
     desc "The datastore type."
-    newvalues(:vmfs, :nfs, :cifs)
-    defaultto(:nfs)
+    isrequired
+    newvalue(:vmfs, :required_features => :block_storage)
+    newvalue(:nfs, :required_features => :file_storage)
+    newvalue(:cifs, :required_features => :file_storage)
     munge do |value|
       value.upcase
     end
@@ -38,40 +41,45 @@ Puppet::Type.newtype(:esx_datastore) do
   end
 
   newparam(:access_mode) do
-    desc 'Enum - HostMountMode: Defines the access mode of the datastore.'
-    newvalues('readOnly', 'readWrite')
-    defaultto('readWrite')
+    desc "Enum - HostMountMode: Defines the access mode of the datastore."
+    newvalues("readOnly", "readWrite")
+    defaultto("readWrite")
     munge do |value|
       value.to_s
     end
   end
 
   # CIFS/NFS only properties.
-  newproperty(:remote_host, :required_features => :remote) do
+  newproperty(:remote_host, :required_features => :file_storage) do
+    desc "Name or IP of remote storage host.  Specify only for file based storage."
   end
 
-  newproperty(:remote_path, :required_features => :remote) do
+  newproperty(:remote_path, :required_features => :file_storage) do
+    desc "Path to volume on remote storage host.  Specify only for file based storage."
   end
 
   # CIFS only parameters.
-  newparam(:user_name) do
+  newparam(:user_name, :required_features => :file_storage) do
   end
 
-  newparam(:password) do
+  newparam(:password, :required_features => :file_storage) do
   end
 
   # VMFS only parameters
-  newparam(:lun) do
+  newparam(:lun, :required_features => :block_storage) do
+    desc "LUN number of storage volume.  Specify only for block storage."
     munge do |value|
       Integer(value)
     end
   end
 
+
+
   validate do
-    if [:nfs, :cifs].include? self[:type] 
+    if ["NFS", "CIFS"].include? self[:type]
       raise Puppet::Error, "Missing remote_host property" unless self[:remote_host]
       raise Puppet::Error, "Missing remote_path property" unless self[:remote_path]
-    elsif self[:type] == :vmfs
+    elsif self[:type] == "VMFS"
       raise Puppet::Error, "Missing lun property" unless self[:lun]
     end
   end
